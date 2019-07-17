@@ -20,6 +20,8 @@ import (
 	"flag"
 	"os"
 
+	ovirtv1alpha1 "_/home/rgolan/src/cluster-api-provider-ovirt/api/v1alpha1"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -34,6 +36,7 @@ var (
 
 func init() {
 
+	ovirtv1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

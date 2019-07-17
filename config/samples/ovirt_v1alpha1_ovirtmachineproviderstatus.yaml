@@ -1,0 +1,7 @@
+apiVersion: ovirt.cluster.k8s.io/v1alpha1
+kind: OvirtMachineProviderStatus
+metadata:
+  name: ovirtmachineproviderstatus-sample
+spec:
+  # Add fields here
+  foo: bar

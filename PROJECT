@@ -1,3 +1,16 @@
 version: "2"
 domain: cluster.k8s.io
 repo: _/home/rgolan/src/cluster-api-provider-ovirt
+resources:
+- group: ovirt
+  version: v1alpha1
+  kind: OvirtClusterProviderSpec
+- group: ovirt
+  version: v1alpha1
+  kind: OvirtClusterProviderStatus
+- group: ovirt
+  version: v1alpha1
+  kind: OvirtMachineProviderSpec
+- group: ovirt
+  version: v1alpha1
+  kind: OvirtMachineProviderStatus
