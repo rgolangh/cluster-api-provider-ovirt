@@ -9,10 +9,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/ovirt/cluster-api-provider-ovirt/pkg/apis/ovirtclusterproviderconfig/v1alpha1"
+	"github.com/ovirt/cluster-api-provider-ovirt/pkg/apis/ovirtclusterproviderconfig/v1beta1"
 )
 
-func getCredentialsSecret(coreClient client.Client, machine machinev1.Machine, spec v1alpha1.OvirtMachineProviderSpec) (map[string][]byte, error) {
+func getCredentialsSecret(coreClient client.Client, machine machinev1.Machine, spec v1beta1.OvirtMachineProviderSpec) (map[string][]byte, error) {
 	if spec.CredentialsSecret == nil {
 		return nil, nil
 	}

@@ -20,13 +20,12 @@ import (
 	"bytes"
 	"fmt"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/klog"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	clusterv1 "github.com/openshift/cluster-api/pkg/apis/cluster/v1alpha1"
 	machinev1 "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1"
-	"github.com/openshift/cluster-api/pkg/util"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Long term, we should retrieve the current status by asking k8s, openstack etc. for all the needed info.
@@ -39,13 +38,13 @@ type instanceStatus *machinev1.Machine
 
 // Get the status of the instance identified by the given machine
 func (ovirtClient *OvirtClient) instanceStatus(machine *machinev1.Machine) (instanceStatus, error) {
-	currentMachine, err := util.GetMachineIfExists(ovirtClient.client, machine.Namespace, machine.Name)
+	currentMachine, err := ovirtClient.machinesClient.Machines("openshift-machine-api").Get(machine.Name, v1.GetOptions{})
 	if err != nil {
 		klog.Errorf("Didn't find mahine with namespace: %s and name: %s", machine.Namespace, machine.Name)
 		return nil, err
 	}
 
-	klog.Infof("Found machine %v", currentMachine)
+	klog.Infof("Found machine %s", currentMachine.Name)
 	if currentMachine == nil {
 		// The current status no longer exists because the matching CRD has been deleted (or does not exist yet ie. bootstrapping)
 		return nil, nil
@@ -56,7 +55,7 @@ func (ovirtClient *OvirtClient) instanceStatus(machine *machinev1.Machine) (inst
 // Sets the status of the instance identified by the given machine to the given machine
 func (ovirtClient *OvirtClient) updateInstanceStatus(machine *machinev1.Machine) error {
 	status := instanceStatus(machine)
-	currentMachine, err := util.GetMachineIfExists(ovirtClient.client, machine.Namespace, machine.Name)
+	currentMachine, err := ovirtClient.machinesClient.Machines("openshift-machine-api").Get(machine.Name, v1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -75,7 +74,7 @@ func (ovirtClient *OvirtClient) updateInstanceStatus(machine *machinev1.Machine)
 }
 
 // Gets the state of the instance stored on the given machine CRD
-func (ovirtClient *OvirtClient) machineInstanceStatus(machine *clusterv1.Machine) (instanceStatus, error) {
+func (ovirtClient *OvirtClient) machineInstanceStatus(machine *machinev1.Machine) (instanceStatus, error) {
 	if machine.ObjectMeta.Annotations == nil {
 		// No state
 		return nil, nil
@@ -89,7 +88,7 @@ func (ovirtClient *OvirtClient) machineInstanceStatus(machine *clusterv1.Machine
 
 	serializer := json.NewSerializer(json.DefaultMetaFactory, ovirtClient.scheme, ovirtClient.scheme, false)
 	var status machinev1.Machine
-	_, _, err := serializer.Decode([]byte(a), &schema.GroupVersionKind{Group: "cluster.k8s.io", Version: "v1beta1", Kind: "Machine"}, &status)
+	_, _, err := serializer.Decode([]byte(a), &schema.GroupVersionKind{Group: "machine.openshift.io", Version: "v1beta1", Kind: "Machine"}, &status)
 	if err != nil {
 		return nil, fmt.Errorf("decoding failure: %v", err)
 	}
@@ -98,7 +97,7 @@ func (ovirtClient *OvirtClient) machineInstanceStatus(machine *clusterv1.Machine
 }
 
 // Applies the state of an instance onto a given machine CRD
-func (ovirtClient *OvirtClient) setMachineInstanceStatus(machine *clusterv1.Machine, status instanceStatus) (*clusterv1.Machine, error) {
+func (ovirtClient *OvirtClient) setMachineInstanceStatus(machine *machinev1.Machine, status instanceStatus) (*machinev1.Machine, error) {
 	// Avoid status within status within status ...
 	status.ObjectMeta.Annotations[InstanceStatusAnnotationKey] = ""
 

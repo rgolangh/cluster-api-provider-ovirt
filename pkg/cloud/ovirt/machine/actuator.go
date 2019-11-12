@@ -24,12 +24,13 @@ import (
 
 	clusterv1 "github.com/openshift/cluster-api/pkg/apis/cluster/v1alpha1"
 	machinev1 "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1"
+	"github.com/openshift/cluster-api/pkg/client/clientset_generated/clientset/typed/machine/v1beta1"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 
-	ovirtconfigv1 "github.com/ovirt/cluster-api-provider-ovirt/pkg/apis/ovirtclusterproviderconfig/v1alpha1"
+	ovirtconfigv1 "github.com/ovirt/cluster-api-provider-ovirt/pkg/apis/ovirtclusterproviderconfig/v1beta1"
 	"github.com/ovirt/cluster-api-provider-ovirt/pkg/cloud/ovirt"
 	"github.com/ovirt/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
 
@@ -50,16 +51,18 @@ type SshCreds struct {
 }
 
 type OvirtClient struct {
-	params ovirt.ActuatorParams
-	scheme *runtime.Scheme
-	client client.Client
+	params         ovirt.ActuatorParams
+	scheme         *runtime.Scheme
+	client         client.Client
+	machinesClient v1beta1.MachineV1beta1Interface
 }
 
 func NewActuator(params ovirt.ActuatorParams) (*OvirtClient, error) {
 	return &OvirtClient{
-		params:           params,
-		client:           params.Client,
-		scheme:           params.Scheme,
+		params:         params,
+		client:         params.Client,
+		machinesClient: params.MachinesClient,
+		scheme:         params.Scheme,
 	}, nil
 }
 
@@ -105,7 +108,6 @@ func (ovirtClient *OvirtClient) Create(ctx context.Context, cluster *clusterv1.C
 		return ovirtClient.handleMachineError(machine, apierrors.CreateMachine(
 			"error creating Ovirt instance: %v", err))
 	}
-
 
 	return ovirtClient.updateAnnotation(machine, instance.MustId())
 }
@@ -263,7 +265,7 @@ func (ovirtClient *OvirtClient) instanceExists(machine *machinev1.Machine) (inst
 		return nil, err
 	}
 	opts := &clients.InstanceListOpts{
-		Name:   machineSpec.Name,
+		Name: machineSpec.Name,
 	}
 
 	machineService, err := clients.NewInstanceServiceFromMachine(machine)

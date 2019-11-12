@@ -29,11 +29,9 @@ import (
 
 	ovirtsdk "github.com/ovirt/go-ovirt"
 
-	"github.com/ovirt/cluster-api-provider-ovirt/pkg/ovirtapi"
-
 	machinev1 "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1"
 
-	ovirtconfigv1 "github.com/ovirt/cluster-api-provider-ovirt/pkg/apis/ovirtclusterproviderconfig/v1alpha1"
+	ovirtconfigv1 "github.com/ovirt/cluster-api-provider-ovirt/pkg/apis/ovirtclusterproviderconfig/v1beta1"
 )
 
 type InstanceService struct {
@@ -64,7 +62,7 @@ type InstanceListOpts struct {
 	Name string `json:"name"`
 }
 
-func GetOvirtConnectionConf() (ovirtapi.Connection, error) {
+func GetOvirtConnectionConf() (*ovirtsdk.ConnectionBuilder, error) {
 
 	//// expecting ovirt-config.yaml at ~/.ovirt/ovirt-config.yaml or at env VAR OVIRT_CONFIG
 	//file, err := os.Open("~/.ovirt/ovirt-config.yaml")
@@ -82,34 +80,35 @@ func GetOvirtConnectionConf() (ovirtapi.Connection, error) {
 	//	return ovirtapi.Connection{}, err
 	//}
 
+	connectionBuilder := ovirtsdk.NewConnectionBuilder()
 
 	// just for debug
 	//klog.Infof("the ovirt config loaded is: %v", out)
-	ovirtconf := ovirtapi.Connection{
-		Url:      "https://rgolan.usersys.redhat.com:8443/ovirt-engine/api",
-		Username: "admin@internal",
-		Password: "123",
-		CAFile:   "",
-	}
+	engineUrl := "https://rgolan.usersys.redhat.com:8443/ovirt-engine/api"
+	connectionBuilder.
+		URL(engineUrl).
+		Username("admin@internal").
+		Password("123").
+		CAFile("")
 
 	client := http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
-	certURL, _ := url.Parse(ovirtconf.Url)
+	certURL, _ := url.Parse(engineUrl)
 	certURL.Path = "ovirt-engine/services/pki-resource"
 	certURL.RawQuery = url.PathEscape("resource=ca-certificate&format=X509-PEM-CA")
 
 	resp, err := client.Get(certURL.String())
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return ovirtconf, fmt.Errorf("error downloading ovirt-engine certificate %s with status %v", err, resp)
+		return connectionBuilder, fmt.Errorf("error downloading ovirt-engine certificate %s with status %v", err, resp)
 	}
 	defer resp.Body.Close()
 
 	file, err := os.Create("/tmp/ovirt-engine.ca")
 	if err != nil {
-		return ovirtconf, fmt.Errorf("failed writing ovirt-engine certificate %s", err)
+		return connectionBuilder, fmt.Errorf("failed writing ovirt-engine certificate %s", err)
 	}
 	io.Copy(file, resp.Body)
-	ovirtconf.CAFile = file.Name()
-	return ovirtconf, nil
+	connectionBuilder.CAFile(file.Name())
+	return connectionBuilder, nil
 }
 
 func NewInstanceServiceFromMachine(machine *machinev1.Machine) (*InstanceService, error) {
@@ -130,24 +129,14 @@ func NewInstanceServiceFromMachine(machine *machinev1.Machine) (*InstanceService
 	return service, err
 }
 
-func NewInstanceService() (*InstanceService, error) {
-	return NewInstanceServiceFromConf(ovirtapi.Connection{})
-}
-
-func NewInstanceServiceFromConf(connection ovirtapi.Connection) (*InstanceService, error) {
-
-	con, err := ovirtsdk.NewConnectionBuilder().
-		URL(connection.Url).
-		Username(connection.Username).
-		Password(connection.Password).
-		CAFile(connection.CAFile).
-		Build()
+func NewInstanceServiceFromConf(builder *ovirtsdk.ConnectionBuilder) (*InstanceService, error) {
+	connection, err := builder.Build()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ovirt api client: %v", err)
 	}
 
-	return &InstanceService{Connection: con}, nil
+	return &InstanceService{Connection: connection}, nil
 }
 
 func (is *InstanceService) InstanceCreate(name string, config *ovirtconfigv1.OvirtMachineProviderSpec) (instance *Instance, err error) {
@@ -157,7 +146,16 @@ func (is *InstanceService) InstanceCreate(name string, config *ovirtconfigv1.Ovi
 
 	cluster := ovirtsdk.NewClusterBuilder().Id(config.ClusterId).MustBuild()
 	template := ovirtsdk.NewTemplateBuilder().Id(config.TemplateId).MustBuild()
-	vm, err := ovirtsdk.NewVmBuilder().Name(config.Name).Cluster(cluster).Template(template).Build()
+	ignition := ovirtsdk.NewInitializationBuilder().
+		CustomScript(config.UserDataSecret.String()).
+		HostName(config.ClusterName).
+		MustBuild()
+	vm, err := ovirtsdk.NewVmBuilder().
+		Name(config.Name).
+		Cluster(cluster).
+		Template(template).
+		Initialization(ignition).
+		Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to construct VM struct")
 	}

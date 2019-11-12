@@ -28,6 +28,7 @@ import (
 	"github.com/ovirt/cluster-api-provider-ovirt/pkg/cloud/ovirt/machine"
 
 	clusterapis "github.com/openshift/cluster-api/pkg/apis"
+	"github.com/openshift/cluster-api/pkg/client/clientset_generated/clientset"
 	capimachine "github.com/openshift/cluster-api/pkg/controller/machine"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -72,8 +73,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	cs, err := clientset.NewForConfig(cfg)
+	if err != nil {
+		klog.Fatalf("Failed to create client from configuration: %v", err)
+	}
 	machineActuator, err := machine.NewActuator(ovirt.ActuatorParams{
 		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		MachinesClient: cs.MachineV1beta1(),
+
 	})
 	if err != nil {
 		panic(err)
